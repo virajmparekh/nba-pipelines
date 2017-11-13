@@ -41,6 +41,10 @@ class NbaToS3Operator(BaseOperator):
             self.s3_key = s3_key
             self.payload = payload
 
+    def get_data(self):
+        return NbaHook(endpoint=self.endpoint, method=self.method,
+                       id=self.id, stats=self.stats).call()
+
     def execute(self, context):
 
         print("WHAT IS GETTING PASSED HERE\n")
@@ -55,10 +59,9 @@ class NbaToS3Operator(BaseOperator):
         print(type(self.id))
         print(type(self.stats))
 
-        response = NbaHook(self.endpoint, self.method,
-                           str(self.id), self.stats)
-
-        return response.call()
+        response = self.get_data()
+        print(response)
+        return response
 
 
 
