@@ -1,28 +1,23 @@
 
 from airflow.models import BaseOperator
 from NbaPlugin.hooks.nba_hook import NbaHook
+from airflow.hooks import S3Hook
+import boa
+import json
+from os import path
 
 
 class NbaToS3Operator(BaseOperator):
     """
-    Github To S3 Operator
-    :param github_conn_id:           The Github connection id.
-    :type github_conn_id:            string
-    {insert github params here}
-    :param s3_conn_id:               The s3 connection id.
-    :type s3_conn_id:                string
-    :param s3_bucket:                The S3 bucket to be used to store
-                                     the Github data.
-    :type s3_bucket:                 string
-    :param s3_key:                   The S3 key to be used to store
-                                     the Github data.
-    :type s3_bucket:                 string
+    NBA To S3 Operator
+
     """
     pass
 
     def __init__(self,
                  endpoint,
                  id,
+                 player_name,
                  method,
                  stats,
                  s3_conn_id,
@@ -33,6 +28,7 @@ class NbaToS3Operator(BaseOperator):
                  **kwargs):
             super().__init__(*args, **kwargs)
             self.endpoint = endpoint
+            self.player_name = player_name
             self.id = id
             self.method = method
             self.stats = stats
@@ -45,33 +41,48 @@ class NbaToS3Operator(BaseOperator):
         return NbaHook(endpoint=self.endpoint, method=self.method,
                        id=self.id, stats=self.stats).call()
 
+    def schemaMapping(self, fields):
+        schema = {}
+        for field in fields:
+            if type(fields[field]) == int:
+                schema[boa.constrict(field)] = 'INTEGER'
+            elif type(fields[field]) == str:
+                schema[boa.constrict(field)] = 'VARCHAR'
+            elif type(fields[field]) == float:
+                schema[boa.constrict(field)] = 'FLOAT'
+        print(schema)
+        return schema
+
     def execute(self, context):
 
-        print("WHAT IS GETTING PASSED HERE\n")
-        print(self.endpoint)
-        print(self.method)
-        print(self.id)
-        print(self.stats)
-
-        print("WHAT IS GETTING PASSED HERE\n")
-        print(type(self.endpoint))
-        print(type(self.method))
-        print(type(self.id))
-        print(type(self.stats))
-
         response = self.get_data()
-        print(response)
-        return response
+        response.columns = response.columns.map(boa.constrict)
 
+        json_data = json.loads(response.to_json(orient='records'))
+        schema_map = self.schemaMapping(json_data[0])
 
+        s3 = S3Hook(s3_conn_id=self.s3_conn_id)
 
+        if self.s3_key.endswith('.json'):
+            split = path.splitext(self.s3_key)
+            schema_key = '{0}_schema{1}'.format(split[0], split[1])
 
-        # method = self.method
-        #
+        results = [dict([boa.constrict(k), v]
+                        for k, v in i.items()) for i in json_data]
+        results = '\n'.join([json.dumps(i) for i in results])
 
-        # m = {}
-        #
-        # for k, v in response.items():
-        #     m[k] = v
-        #
-        # return m
+        s3.load_string(
+            string_data=str(schema_map),
+            bucket_name=self.s3_bucket,
+            key=schema_key,
+            replace=True
+        )
+
+        s3.load_string(
+            string_data=results,
+            bucket_name=self.s3_bucket,
+            key=self.s3_key,
+            replace=True
+        )
+        s3.load_string
+        s3.connection.close()

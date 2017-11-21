@@ -29,13 +29,3 @@ class NbaHook(BaseHook):
         # print(test_get_attribute)
         # print("THIS IS IT\n")
         return getattr(getattr(methodmap[endpoint], method)(id), stats)()
-
-
-        # objectmap = {
-        #     'player': player,
-        #     'game': game,
-        #     'team': team,
-        #     'constants': constants
-        # #     }
-        #
-        # return methodmap[endpoint].method(self.id)
